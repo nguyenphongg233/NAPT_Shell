@@ -5,13 +5,13 @@
 #include <string>
 #include <vector>
 
-// Cấu trúc lưu trữ thông tin tiến trình con
+// Structure to store child process information
 struct ProcessInfo {
     DWORD pid;
     HANDLE hProcess;
     HANDLE hThread;
     std::string cmdName;
-    std::string status; // "Running" hoặc "Stopped"
+    std::string status; // "Running" or "Stopped"
 };
 
 void AddBackgroundProcess(DWORD pid, HANDLE hProcess, HANDLE hThread, const std::string& name);
@@ -19,6 +19,6 @@ void ListProcesses();
 void KillProcess(DWORD pid);
 void StopProcess(DWORD pid);
 void ResumeProcess(DWORD pid);
-void CleanUpProcesses(); // Xóa các process đã kết thúc khỏi danh sách
+void CleanUpProcesses(); // Remove terminated processes from list
 
 #endif // PROCESS_MGR_H

@@ -3,7 +3,7 @@
 
 #include <windows.h>
 
-// Biến toàn cục lưu Handle của tiến trình Foreground đang chạy
+// Global variable to store handle of running foreground process
 extern HANDLE g_hForegroundProcess; 
 
 void SetupSignalHandler();

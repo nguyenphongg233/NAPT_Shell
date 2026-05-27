@@ -23,7 +23,7 @@ void CleanUpProcesses() {
 }
 
 void ListProcesses() {
-    CleanUpProcesses(); // Dọn rác trước khi in
+    CleanUpProcesses(); // Clean up processes before listing
     std::cout << std::left << std::setw(15) << "Process ID" 
               << std::setw(25) << "Command Name" 
               << "Status\n";
