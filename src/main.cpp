@@ -30,7 +30,11 @@ int main() {
         while (true) {
             int ch = _getch();  // Read single character without echo
             
-            if (ch == '\t') {  // Tab key
+            if (ch == 0 || ch == 0xE0) {  // Special key prefix (arrow keys, function keys)
+                _getch(); // Consume the second byte of the special key sequence
+                continue;
+            }
+            else if (ch == '\t') {  // Tab key
                 // Show completion suggestions for cd command
                 if (input.find("cd ") == 0) {
                     ShowCompletionSuggestions(input);

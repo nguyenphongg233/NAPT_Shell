@@ -36,13 +36,16 @@ void ListProcesses() {
 }
 
 void KillProcess(DWORD pid) {
-    for (auto& p : bgProcesses) {
-        if (p.pid == pid) {
-            if (TerminateProcess(p.hProcess, 0)) {
+    for (auto it = bgProcesses.begin(); it != bgProcesses.end(); ++it) {
+        if (it->pid == pid) {
+            if (TerminateProcess(it->hProcess, 0)) {
                 std::cout << "Killed process " << pid << "\n";
             } else {
                 std::cerr << "Failed to kill process " << pid << "\n";
             }
+            CloseHandle(it->hProcess);
+            CloseHandle(it->hThread);
+            bgProcesses.erase(it);
             return;
         }
     }

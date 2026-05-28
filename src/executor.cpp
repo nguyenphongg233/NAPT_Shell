@@ -12,9 +12,14 @@ void LaunchExternal(std::string cmd, bool background) {
     si.cb = sizeof(si);
     ZeroMemory(&pi, sizeof(pi));
 
-    // Handle .bat files separately
-    if (cmd.find(".bat") != std::string::npos) {
-        cmd = "cmd.exe /c " + cmd;
+    // Handle .bat files: check if the first token ends with .bat (case-insensitive)
+    {
+        std::string firstToken = cmd.substr(0, cmd.find(' '));
+        std::string lowerToken = firstToken;
+        for (char& c : lowerToken) c = (char)tolower((unsigned char)c);
+        if (lowerToken.size() >= 4 && lowerToken.substr(lowerToken.size() - 4) == ".bat") {
+            cmd = "cmd.exe /c " + cmd;
+        }
     }
 
     char* writableCmd = new char[cmd.size() + 1];
