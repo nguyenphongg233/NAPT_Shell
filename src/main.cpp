@@ -60,6 +60,10 @@ int main() {
             }
         }
 
+        while (!input.empty() && input.back() == ' ') {
+            input.pop_back();
+        }
+
         if (input.empty()) continue;
 
         bool isBackground = false;

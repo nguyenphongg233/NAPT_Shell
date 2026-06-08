@@ -1,15 +1,19 @@
 #include "../include/process_mgr.h"
 #include <iostream>
 #include <iomanip>
+#include <mutex>
 
 std::vector<ProcessInfo> bgProcesses;
+std::mutex bgMutex;
 
 void AddBackgroundProcess(DWORD pid, HANDLE hProcess, HANDLE hThread, const std::string& name) {
+    std::lock_guard<std::mutex> lock(bgMutex);
     bgProcesses.push_back({pid, hProcess, hThread, name, "Running"});
     std::cout << "[Background] Process created with PID: " << pid << "\n";
 }
 
 void CleanUpProcesses() {
+    std::lock_guard<std::mutex> lock(bgMutex);
     for (auto it = bgProcesses.begin(); it != bgProcesses.end(); ) {
         DWORD exitCode;
         if (GetExitCodeProcess(it->hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
@@ -23,7 +27,8 @@ void CleanUpProcesses() {
 }
 
 void ListProcesses() {
-    CleanUpProcesses(); // Clean up processes before listing
+    CleanUpProcesses();
+    std::lock_guard<std::mutex> lock(bgMutex); 
     std::cout << std::left << std::setw(15) << "Process ID" 
               << std::setw(25) << "Command Name" 
               << "Status\n";
@@ -36,6 +41,7 @@ void ListProcesses() {
 }
 
 void KillProcess(DWORD pid) {
+    std::lock_guard<std::mutex> lock(bgMutex);
     for (auto it = bgProcesses.begin(); it != bgProcesses.end(); ++it) {
         if (it->pid == pid) {
             if (TerminateProcess(it->hProcess, 0)) {
@@ -53,6 +59,7 @@ void KillProcess(DWORD pid) {
 }
 
 void StopProcess(DWORD pid) {
+    std::lock_guard<std::mutex> lock(bgMutex);
     for (auto& p : bgProcesses) {
         if (p.pid == pid) {
             if (SuspendThread(p.hThread) != (DWORD)-1) {
@@ -66,6 +73,7 @@ void StopProcess(DWORD pid) {
 }
 
 void ResumeProcess(DWORD pid) {
+    std::lock_guard<std::mutex> lock(bgMutex);
     for (auto& p : bgProcesses) {
         if (p.pid == pid) {
             if (ResumeThread(p.hThread) != (DWORD)-1) {

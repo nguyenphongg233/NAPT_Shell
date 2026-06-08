@@ -4,17 +4,27 @@
 #include "../include/completion.h"
 #include <iostream>
 #include <windows.h>
+#include <iomanip>
+#include <stdexcept>
 
 bool HandleBuiltin(const std::vector<std::string>& args) {
     if (args.empty()) return false;
 
     // 1. Exit/quit command
     if (args[0] == "exit" || args[0] == "quit") {
+        if (args.size() > 1) {
+            std::cerr << "TinyShell: Error: too many arguments for exit/quit command\n";
+            return true;
+        }
         ExitProcess(0);
     } 
     
     // 2. Help command
     else if (args[0] == "help") {
+        if (args.size() > 1) {
+            std::cerr << "TinyShell: Error: too many arguments for help command\n";
+            return true;    
+        }
         std::cout << "\n";
         std::cout << "==============================================================================\n";
         std::cout << "=                    TinyShell - Command Reference                           =\n";
@@ -62,9 +72,14 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
     
     // 4. Change directory command
     else if (args[0] == "cd") {
+        if (args.size() > 2) {
+            std::cerr << "TinyShell: Error: too many arguments for cd command\n";
+            return true;    
+        }
         if (args.size() < 2) {
             std::cerr << "TinyShell: Error: Missing path for cd command\n";
-        } else {
+        } 
+        else {
             // SetCurrentDirectoryA automatically handles ".", ".." and absolute/relative paths
             if (!SetCurrentDirectoryA(args[1].c_str())) {
                 std::cerr << "TinyShell: Error: Cannot change to this directory. Error code: " << GetLastError() << "\n";
@@ -75,15 +90,24 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
     
     // 5. List directory command (Windows-style)
     else if (args[0] == "dir") {
+        if (args.size() > 1) {
+            std::cerr << "TinyShell: Error: too many arguments for dir command\n";
+            return true;    
+        }
         system("dir"); 
         return true;
     }
     
     // 5.5 List directory command (Unix-style)
     else if (args[0] == "ls") {
+        if (args.size() > 2) {
+            std::cerr << "TinyShell: Error: too many arguments for ls command\n";
+            return true;    
+        }
         if (args.size() < 2) {
             ListDirectory("");
-        } else {
+        } 
+        else {
             ListDirectory(args[1]);
         }
         return true;
@@ -91,17 +115,34 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
     
     // 6. Date and time command
     else if (args[0] == "date" || args[0] == "time") {
+        if (args.size() > 1) {
+            std::cerr << "TinyShell: Error: too many arguments for date/time command\n";
+            return true;    
+        }
+        
         SYSTEMTIME st;
         GetLocalTime(&st);
-        if (args[0] == "date") 
-            std::cout << "Current date: " << st.wDay << "/" << st.wMonth << "/" << st.wYear << "\n";
-        else 
-            std::cout << "Current time: " << st.wHour << ":" << st.wMinute << ":" << st.wSecond << "\n";
+        
+        if (args[0] == "date") {
+            std::cout << "Current date: " 
+                      << std::setfill('0') << std::setw(2) << st.wDay << "/" 
+                      << std::setfill('0') << std::setw(2) << st.wMonth << "/" 
+                      << st.wYear << "\n";
+        } else {
+            std::cout << "Current time: " 
+                      << std::setfill('0') << std::setw(2) << st.wHour << ":" 
+                      << std::setfill('0') << std::setw(2) << st.wMinute << ":" 
+                      << std::setfill('0') << std::setw(2) << st.wSecond << "\n";
+        }
         return true;
-    }
-    
+    } 
+
     // 7. Display PATH environment variable
     else if (args[0] == "path") {
+        if (args.size() > 1) {
+            std::cerr << "TinyShell: Error: too many arguments for path command\n";
+            return true;    
+        }
         char buffer[32767];
         if (GetEnvironmentVariableA("PATH", buffer, 32767)) {
             std::cout << "PATH=" << buffer << "\n";
@@ -113,6 +154,10 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
     
     // 8. Add directory to PATH
     else if (args[0] == "addpath") {
+        if (args.size() > 2) {
+            std::cerr << "TinyShell: Error: too many arguments for addpath command\n";
+            return true;    
+        }
         if (args.size() < 2) {
             std::cerr << "TinyShell: Error: Missing path argument for addpath command\n";
         } else {
@@ -130,36 +175,72 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
     
     // 9. List background processes
     else if (args[0] == "list") {
+        if (args.size() > 1) {
+            std::cerr << "TinyShell: Error: too many arguments for list command\n";
+            return true;    
+        }
         ListProcesses();
         return true;
     }
     
     // 10. Kill process command
     else if (args[0] == "kill") {
-        if (args.size() < 2) {
+        if (args.size() > 2) {
+            std::cerr << "TinyShell: Error: too many arguments for kill command\n";
+        }
+        else if (args.size() < 2) {
             std::cerr << "TinyShell: Error: Missing PID for kill command\n";
         } else {
-            KillProcess(std::stoul(args[1]));
+            try {
+                DWORD pid = std::stoul(args[1]);
+                KillProcess(pid);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "TinyShell: Error: Invalid PID format. Please enter a valid number.\n";
+            } catch (const std::out_of_range& e) {
+                std::cerr << "TinyShell: Error: PID number is too large.\n";
+            }
         }
         return true;
     }
     
     // 11. Suspend process command
     else if (args[0] == "stop") {
-        if (args.size() < 2) {
+        if (args.size() > 2) {
+            std::cerr << "TinyShell: Error: too many arguments for stop command\n";    
+        }
+        else if (args.size() < 2) {
             std::cerr << "TinyShell: Error: Missing PID for stop command\n";
-        } else {
-            StopProcess(std::stoul(args[1]));
+        } 
+        else {
+            try {
+                DWORD pid = std::stoul(args[1]);
+                StopProcess(pid);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "TinyShell: Error: Invalid PID format. Please enter a valid number.\n";
+            } catch (const std::out_of_range& e) {
+                std::cerr << "TinyShell: Error: PID number is too large.\n";
+            }
         }
         return true;
     }
     
     // 12. Resume process command
     else if (args[0] == "resume") {
-        if (args.size() < 2) {
+        if (args.size() > 2) {
+            std::cerr << "TinyShell: Error: too many arguments for resume command\n";
+        }
+        else if (args.size() < 2) {
             std::cerr << "TinyShell: Error: Missing PID for resume command\n";
-        } else {
-            ResumeProcess(std::stoul(args[1]));
+        } 
+        else {
+            try {
+                DWORD pid = std::stoul(args[1]);
+                ResumeProcess(pid);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "TinyShell: Error: Invalid PID format. Please enter a valid number.\n";
+            } catch (const std::out_of_range& e) {
+                std::cerr << "TinyShell: Error: PID number is too large.\n";
+            }
         }
         return true;
     }
