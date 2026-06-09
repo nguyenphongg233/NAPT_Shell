@@ -8,7 +8,7 @@
 std::vector<std::string> GetCompletions(const std::string& partialPath);
 
 // Show completion suggestions for cd command
-void ShowCompletionSuggestions(const std::string& currentInput);
+std::string ShowCompletionSuggestions(const std::string& currentInput);
 
 // List files in directory (for ls command)
 void ListDirectory(const std::string& path);
