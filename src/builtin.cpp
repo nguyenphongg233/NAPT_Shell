@@ -189,16 +189,9 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
             std::cerr << "TinyShell: Error: too many arguments for kill command\n";
         }
         else if (args.size() < 2) {
-            std::cerr << "TinyShell: Error: Missing PID for kill command\n";
+            std::cerr << "TinyShell: Error: Missing target for kill command. Use <PID> or %<JobID>\n";
         } else {
-            try {
-                DWORD pid = std::stoul(args[1]);
-                KillProcess(pid);
-            } catch (const std::invalid_argument& e) {
-                std::cerr << "TinyShell: Error: Invalid PID format. Please enter a valid number.\n";
-            } catch (const std::out_of_range& e) {
-                std::cerr << "TinyShell: Error: PID number is too large.\n";
-            }
+            KillProcess(args[1]); 
         }
         return true;
     }
@@ -209,17 +202,10 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
             std::cerr << "TinyShell: Error: too many arguments for stop command\n";    
         }
         else if (args.size() < 2) {
-            std::cerr << "TinyShell: Error: Missing PID for stop command\n";
+            std::cerr << "TinyShell: Error: Missing target for stop command. Use <PID> or %<JobID>\n";
         } 
         else {
-            try {
-                DWORD pid = std::stoul(args[1]);
-                StopProcess(pid);
-            } catch (const std::invalid_argument& e) {
-                std::cerr << "TinyShell: Error: Invalid PID format. Please enter a valid number.\n";
-            } catch (const std::out_of_range& e) {
-                std::cerr << "TinyShell: Error: PID number is too large.\n";
-            }
+            StopProcess(args[1]);
         }
         return true;
     }
@@ -230,20 +216,13 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
             std::cerr << "TinyShell: Error: too many arguments for resume command\n";
         }
         else if (args.size() < 2) {
-            std::cerr << "TinyShell: Error: Missing PID for resume command\n";
+            std::cerr << "TinyShell: Error: Missing target for resume command. Use <PID> or %<JobID>\n";
         } 
         else {
-            try {
-                DWORD pid = std::stoul(args[1]);
-                ResumeProcess(pid);
-            } catch (const std::invalid_argument& e) {
-                std::cerr << "TinyShell: Error: Invalid PID format. Please enter a valid number.\n";
-            } catch (const std::out_of_range& e) {
-                std::cerr << "TinyShell: Error: PID number is too large.\n";
-            }
+            ResumeProcess(args[1]);
         }
         return true;
-    }
+    } 
 
     return false; // Return false if not a built-in command (pass to external process)
 }

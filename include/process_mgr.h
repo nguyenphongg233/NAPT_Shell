@@ -16,9 +16,9 @@ struct ProcessInfo {
 
 void AddBackgroundProcess(DWORD pid, HANDLE hProcess, HANDLE hThread, const std::string& name);
 void ListProcesses();
-void KillProcess(DWORD pid);
-void StopProcess(DWORD pid);
-void ResumeProcess(DWORD pid);
+void KillProcess(const std::string& target);
+void StopProcess(const std::string& target);
+void ResumeProcess(const std::string& target);
 void CleanUpProcesses(); // Remove terminated processes from list
 
 #endif // PROCESS_MGR_H
