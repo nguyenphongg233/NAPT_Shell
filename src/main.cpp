@@ -160,6 +160,56 @@ int main() {
             while (!input.empty() && input.back() == ' ') input.pop_back(); 
         }
 
+        // INPUT REDIRECTION DETECTION LOGIC (Command < File)
+        size_t inRedirPos = input.find('<');
+        if (inRedirPos != std::string::npos) {
+            std::string cmd = input.substr(0, inRedirPos);
+            std::string inFile = input.substr(inRedirPos + 1);
+
+            auto trim = [](std::string& s) {
+                size_t start = s.find_first_not_of(" \t");
+                size_t end = s.find_last_not_of(" \t");
+                if (start == std::string::npos) s = "";
+                else s = s.substr(start, end - start + 1);
+            };
+
+            trim(cmd);
+            trim(inFile);
+
+            if (cmd.empty() || inFile.empty()) {
+                std::cerr << "TinyShell: Error: Invalid input redirection syntax (e.g., 'command < file.txt').\n";
+                continue;
+            }
+
+            ExecuteWithInputRedirection(cmd, inFile, isBackground);
+            continue; 
+        }
+
+        // OUTPUT REDIRECTION DETECTION LOGIC 
+        size_t redirPos = input.find('>');
+        if (redirPos != std::string::npos) {
+            std::string cmd = input.substr(0, redirPos);
+            std::string outFile = input.substr(redirPos + 1);
+
+            auto trim = [](std::string& s) {
+                size_t start = s.find_first_not_of(" \t");
+                size_t end = s.find_last_not_of(" \t");
+                if (start == std::string::npos) s = "";
+                else s = s.substr(start, end - start + 1);
+            };
+
+            trim(cmd);
+            trim(outFile);
+
+            if (cmd.empty() || outFile.empty()) {
+                std::cerr << "TinyShell: Error: Invalid redirection syntax (e.g., 'command > file.txt').\n";
+                continue;
+            }
+
+            ExecuteWithOutputRedirection(cmd, outFile, isBackground);
+            continue; 
+        }
+
         // PIPELINE DETECTION LOGIC
         size_t pipePos = input.find('|');
         if (pipePos != std::string::npos) {

@@ -123,3 +123,103 @@ void ExecutePipeline(std::string cmd1, std::string cmd2, bool isBackground) {
         // pi2 is kept and managed by AddBackgroundProcess
     }
 }
+
+void ExecuteWithInputRedirection(std::string cmd, std::string inFile, bool background) {
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE; // Must allow inheritance so child process can read from file
+    sa.lpSecurityDescriptor = NULL;
+
+    // Open the existing input file
+    HANDLE hFile = CreateFileA(inFile.c_str(), GENERIC_READ, FILE_SHARE_READ, &sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        std::cerr << "TinyShell: Error: Cannot open input file '" << inFile << "'. Ensure the file exists.\n";
+        return;
+    }
+
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si)); si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+
+    // Redirect Standard Input to the file handle
+    si.hStdInput = hFile;
+    si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE); // Keep output on console
+    si.hStdError = GetStdHandle(STD_ERROR_HANDLE);   // Keep errors on console
+    si.dwFlags |= STARTF_USESTDHANDLES;
+
+    std::vector<char> cmdBuf(cmd.begin(), cmd.end()); cmdBuf.push_back('\0');
+    
+    DWORD dwCreationFlags = background ? CREATE_NEW_CONSOLE : 0;
+
+    bool success = CreateProcessA(NULL, cmdBuf.data(), NULL, NULL, TRUE, dwCreationFlags, NULL, NULL, &si, &pi);
+
+    // Parent shell must close its handle to the file immediately after creating process
+    CloseHandle(hFile);
+
+    if (success) {
+        if (background) {
+            AddBackgroundProcess(pi.dwProcessId, pi.hProcess, pi.hThread, cmd + " < " + inFile);
+            std::cout << "TinyShell: Started background process (PID: " << pi.dwProcessId << ")\n";
+        } else {
+            g_hForegroundProcess = pi.hProcess;
+            WaitForSingleObject(pi.hProcess, INFINITE);
+            g_hForegroundProcess = NULL;
+            
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+        }
+    } else {
+        std::cerr << "Command not found or execution failed.\n";
+    }
+}
+
+void ExecuteWithOutputRedirection(std::string cmd, std::string outFile, bool background) {
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE; // Must allow inheritance so child process can write to file
+    sa.lpSecurityDescriptor = NULL;
+
+    // Create or open the output file
+    HANDLE hFile = CreateFileA(outFile.c_str(), GENERIC_WRITE, 0, &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        std::cerr << "TinyShell: Error: Cannot open or create output file.\n";
+        return;
+    }
+
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si)); si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+
+    // Redirect Standard Output to the file handle
+    si.hStdOutput = hFile;
+    si.hStdError = GetStdHandle(STD_ERROR_HANDLE); // Keep errors on console
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE); // Keep input from keyboard
+    si.dwFlags |= STARTF_USESTDHANDLES;
+
+    std::vector<char> cmdBuf(cmd.begin(), cmd.end()); cmdBuf.push_back('\0');
+    
+    DWORD dwCreationFlags = background ? CREATE_NEW_CONSOLE : 0;
+
+    bool success = CreateProcessA(NULL, cmdBuf.data(), NULL, NULL, TRUE, dwCreationFlags, NULL, NULL, &si, &pi);
+
+    // Parent shell must close its handle to the file immediately after creating process
+    CloseHandle(hFile);
+
+    if (success) {
+        if (background) {
+            AddBackgroundProcess(pi.dwProcessId, pi.hProcess, pi.hThread, cmd + " > " + outFile);
+            std::cout << "TinyShell: Started background process (PID: " << pi.dwProcessId << ")\n";
+        } else {
+            g_hForegroundProcess = pi.hProcess;
+            WaitForSingleObject(pi.hProcess, INFINITE);
+            g_hForegroundProcess = NULL;
+            
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+        }
+    } else {
+        std::cerr << "Command not found or execution failed.\n";
+    }
+}
