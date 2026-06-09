@@ -160,6 +160,34 @@ int main() {
             while (!input.empty() && input.back() == ' ') input.pop_back(); 
         }
 
+        // PIPELINE DETECTION LOGIC
+        size_t pipePos = input.find('|');
+        if (pipePos != std::string::npos) {
+            // Split the string into 2 commands
+            std::string cmd1 = input.substr(0, pipePos);
+            std::string cmd2 = input.substr(pipePos + 1);
+
+            // Small Lambda function to trim leading and trailing whitespaces
+            auto trim = [](std::string& s) {
+                size_t start = s.find_first_not_of(" \t");
+                size_t end = s.find_last_not_of(" \t");
+                if (start == std::string::npos) s = ""; // String is all spaces
+                else s = s.substr(start, end - start + 1);
+            };
+
+            trim(cmd1);
+            trim(cmd2);
+
+            if (cmd1.empty() || cmd2.empty()) {
+                std::cerr << "TinyShell: Error: Invalid pipeline syntax (e.g., 'cmd1 | cmd2').\n";
+                continue;
+            }
+
+            // Delegate pipeline execution to the Executor
+            ExecutePipeline(cmd1, cmd2, isBackground);
+            continue; // Skip single command execution after running the pipeline
+        }
+
         std::vector<std::string> args = ParseInput(input);
         if (args.empty()) continue;
 
