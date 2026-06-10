@@ -6,18 +6,21 @@
 #include <tlhelp32.h>
 #include <algorithm>
 #include <unordered_map>
+#include <vector>
 #include <thread>
 #include <chrono>
 
 std::vector<ProcessInfo> bgProcesses;
 std::mutex bgMutex;
 
+// Extract the base file name from a full path
 std::string GetFileName(const std::string& path) {
     size_t pos = path.find_last_of("\\/");
     if (pos == std::string::npos) return path;
     return path.substr(pos + 1);
 }
 
+// Add a new background process to the management list
 void AddBackgroundProcess(DWORD pid, HANDLE hProcess, HANDLE hThread, const std::string& name) {
     std::lock_guard<std::mutex> lock(bgMutex);
     bgProcesses.push_back({pid, hProcess, hThread, name, "Running"});
@@ -26,11 +29,13 @@ void AddBackgroundProcess(DWORD pid, HANDLE hProcess, HANDLE hThread, const std:
               << " (Job ID: %" << bgProcesses.size() << ")\n";
 }
 
+// Convert a string to lowercase for case-insensitive comparison
 std::string ToLower(std::string str) {
     for (char& c : str) c = std::tolower(c);
     return str;
 }
 
+// Clean up dead processes and handle UWP App PID hijacking
 void CleanUpProcesses() {
     std::lock_guard<std::mutex> lock(bgMutex);
     for (auto it = bgProcesses.begin(); it != bgProcesses.end(); ) {
@@ -46,6 +51,7 @@ void CleanUpProcesses() {
 
             std::string searchName = ToLower(baseName);
 
+            // Map common UWP command names to their actual background executable names
             static const std::unordered_map<std::string, std::string> uwpAliases = {
                 {"calc.exe",         "calculatorapp.exe"},
                 {"wt.exe",           "windowsterminal.exe"},
@@ -61,7 +67,7 @@ void CleanUpProcesses() {
 
             DWORD realPid = 0;
             
-            // 2. Scan system for the "Real" process
+            // 2. Scan system for the actual running process matching the alias
             HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
             if (hSnap != INVALID_HANDLE_VALUE) {
                 PROCESSENTRY32 pe;
@@ -70,14 +76,14 @@ void CleanUpProcesses() {
                     do {
                         if (ToLower(pe.szExeFile) == searchName) {
                             realPid = pe.th32ProcessID;
-                            break; // Found the real process!
+                            break; // Found the real UWP process
                         }
                     } while (Process32Next(hSnap, &pe));
                 }
                 CloseHandle(hSnap);
             }
 
-            // 3. Hijack the new PID if found
+            // 3. Hijack the new PID if found (Replace the dead stub with the real app)
             if (realPid != 0 && realPid != it->pid) {
                 CloseHandle(it->hProcess); // Close dead stub handles
                 CloseHandle(it->hThread);
@@ -86,7 +92,7 @@ void CleanUpProcesses() {
                 it->pid = realPid;
                 it->hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE, realPid);
                 
-                // Recover the main thread of the new process
+                // Recover the main thread of the new process for Suspend/Resume capabilities
                 hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
                 if (hSnap != INVALID_HANDLE_VALUE) {
                     THREADENTRY32 te;
@@ -103,7 +109,7 @@ void CleanUpProcesses() {
                 }
                 ++it; // Keep it in the list and move on
             } else {
-                // It's truly dead, remove it from list
+                // It's truly dead, remove it from the tracking list entirely
                 CloseHandle(it->hProcess);
                 CloseHandle(it->hThread);
                 it = bgProcesses.erase(it);
@@ -114,31 +120,31 @@ void CleanUpProcesses() {
     }
 }
 
+// Display all active background processes
 void ListProcesses() {
     CleanUpProcesses();
     std::lock_guard<std::mutex> lock(bgMutex); 
     
-    // Header (Added Job ID column)
+    // Display Header
     std::cout << std::left << std::setw(10) << "Job ID"
               << std::setw(15) << "Process ID" 
               << std::setw(25) << "Command Name" 
               << "Status\n";
-    std::cout << std::string(65, '-') << "\n"; // Increase the separator line length to 65
+    std::cout << std::string(65, '-') << "\n"; 
 
     int jobId = 1;
     for (const auto& p : bgProcesses) {
-        // 1. Extract only the file name instead of the full path
+        // Extract only the file name instead of the full path for cleaner display
         std::string displayName = GetFileName(p.cmdName);
         
-        // 2. If the name is too long (> 22 chars), truncate and append "..."
+        // Truncate long names to maintain table alignment
         if (displayName.length() > 22) {
             displayName = displayName.substr(0, 22) + "...";
         }
         
-        // Create Job ID display string (e.g., [%1])
+        // Format Job ID string (e.g., [%1])
         std::string jobStr = "[%" + std::to_string(jobId++) + "]";
 
-        // 3. Print with standard formatting
         std::cout << std::left << std::setw(10) << jobStr
                   << std::setw(15) << p.pid 
                   << std::setw(25) << displayName 
@@ -148,7 +154,7 @@ void ListProcesses() {
 }
 
 // --- HELPER FUNCTION: Convert input string (%ID or PID) to actual PID ---
-// Note: This function must only be called when bgMutex is already locked!
+// Note: This function assumes bgMutex is already locked by the caller!
 DWORD ResolveTargetToPID(const std::string& target) {
     if (target.empty()) return 0;
 
@@ -177,18 +183,47 @@ DWORD ResolveTargetToPID(const std::string& target) {
     }
 }
 
+// Gather all child PIDs belonging to a parent PID (Process Tree)
+std::vector<DWORD> GetProcessTree(DWORD parentPid) {
+    std::vector<DWORD> pids = { parentPid };
+    HANDLE hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hProcessSnap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32 pe32;
+        pe32.dwSize = sizeof(PROCESSENTRY32);
+        if (Process32First(hProcessSnap, &pe32)) {
+            do {
+                if (pe32.th32ParentProcessID == parentPid) {
+                    pids.push_back(pe32.th32ProcessID);
+                }
+            } while (Process32Next(hProcessSnap, &pe32));
+        }
+        CloseHandle(hProcessSnap);
+    }
+    return pids;
+}
+
+// Terminate a process and all its children
 void KillProcess(const std::string& target) {
+    CleanUpProcesses(); // Ensure UWP states are updated before targeting
     std::lock_guard<std::mutex> lock(bgMutex);
     DWORD pid = ResolveTargetToPID(target);
-    if (pid == 0) return; // Return immediately if target resolution fails
+    if (pid == 0) return; 
 
     for (auto it = bgProcesses.begin(); it != bgProcesses.end(); ++it) {
         if (it->pid == pid) {
-            if (TerminateProcess(it->hProcess, 0)) {
-                std::cout << "Killed process " << pid << "\n";
-            } else {
-                std::cerr << "Failed to kill process " << pid << "\n";
+            // Get the entire process tree to prevent ghost/zombie windows
+            std::vector<DWORD> treePids = GetProcessTree(pid);
+            
+            // Terminate all processes in the tree
+            for (DWORD targetPid : treePids) {
+                HANDLE hTarget = OpenProcess(PROCESS_TERMINATE, FALSE, targetPid);
+                if (hTarget != NULL) {
+                    TerminateProcess(hTarget, 0);
+                    CloseHandle(hTarget);
+                }
             }
+            
+            std::cout << "Killed process tree for PID " << pid << "\n";
             CloseHandle(it->hProcess);
             CloseHandle(it->hThread);
             bgProcesses.erase(it);
@@ -198,7 +233,9 @@ void KillProcess(const std::string& target) {
     std::cerr << "Process ID " << pid << " not found in background list.\n";
 }
 
+// Suspend a process and all its children
 void StopProcess(const std::string& target) {
+    CleanUpProcesses();
     std::lock_guard<std::mutex> lock(bgMutex);
     DWORD pid = ResolveTargetToPID(target);
     if (pid == 0) return;
@@ -208,7 +245,10 @@ void StopProcess(const std::string& target) {
         if (p.pid == pid) {
             found = true;
             
-            // Take a snapshot of all running threads in the entire system
+            // Get process tree
+            std::vector<DWORD> treePids = GetProcessTree(pid);
+            
+            // Take a snapshot of all threads in the system
             HANDLE hThreadSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
             if (hThreadSnapshot != INVALID_HANDLE_VALUE) {
                 THREADENTRY32 te32;
@@ -216,8 +256,8 @@ void StopProcess(const std::string& target) {
 
                 if (Thread32First(hThreadSnapshot, &te32)) {
                     do {
-                        // If this thread belongs to our process -> Suspend it!
-                        if (te32.th32OwnerProcessID == pid) {
+                        // If thread belongs to our target process tree, suspend it
+                        if (std::find(treePids.begin(), treePids.end(), te32.th32OwnerProcessID) != treePids.end()) {
                             HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, te32.th32ThreadID);
                             if (hThread != NULL) {
                                 SuspendThread(hThread);
@@ -230,14 +270,16 @@ void StopProcess(const std::string& target) {
             }
             
             p.status = "Stopped";
-            std::cout << "Stopped process " << pid << " (All threads suspended)\n";
+            std::cout << "Stopped process " << pid << " (All tree threads suspended)\n";
             return;
         }
     }
     if (!found) std::cerr << "Process ID " << pid << " not found.\n";
 }
 
+// Resume a suspended process and all its children
 void ResumeProcess(const std::string& target) {
+    CleanUpProcesses();
     std::lock_guard<std::mutex> lock(bgMutex);
     DWORD pid = ResolveTargetToPID(target);
     if (pid == 0) return;
@@ -247,7 +289,8 @@ void ResumeProcess(const std::string& target) {
         if (p.pid == pid) {
             found = true;
 
-            // Do the same: Scan all threads and awaken (Resume) them
+            std::vector<DWORD> treePids = GetProcessTree(pid);
+
             HANDLE hThreadSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
             if (hThreadSnapshot != INVALID_HANDLE_VALUE) {
                 THREADENTRY32 te32;
@@ -255,7 +298,8 @@ void ResumeProcess(const std::string& target) {
 
                 if (Thread32First(hThreadSnapshot, &te32)) {
                     do {
-                        if (te32.th32OwnerProcessID == pid) {
+                        // Awaken all threads belonging to the process tree
+                        if (std::find(treePids.begin(), treePids.end(), te32.th32OwnerProcessID) != treePids.end()) {
                             HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, te32.th32ThreadID);
                             if (hThread != NULL) {
                                 ResumeThread(hThread);
@@ -268,47 +312,59 @@ void ResumeProcess(const std::string& target) {
             }
 
             p.status = "Running";
-            std::cout << "Resumed process " << pid << " (All threads awakened)\n";
+            std::cout << "Resumed process " << pid << " (All tree threads awakened)\n";
             return;
         }
     }
     if (!found) std::cerr << "Process ID " << pid << " not found.\n";
 }
 
+// Graceful Shutdown: Terminate all background process trees before exiting shell
 void TerminateAllProcesses() {
+    CleanUpProcesses(); // Crucial: Update PIDs for UWP apps before mass termination
     std::lock_guard<std::mutex> lock(bgMutex);
     int count = 0;
     
     for (auto& p : bgProcesses) {
-        DWORD exitCode;
-        if (GetExitCodeProcess(p.hProcess, &exitCode) && exitCode == STILL_ACTIVE) {
-            if (TerminateProcess(p.hProcess, 0)) {
-                count++;
+        std::vector<DWORD> treePids = GetProcessTree(p.pid);
+        
+        for (DWORD targetPid : treePids) {
+            HANDLE hTarget = OpenProcess(PROCESS_TERMINATE, FALSE, targetPid);
+            if (hTarget != NULL) {
+                TerminateProcess(hTarget, 0);
+                CloseHandle(hTarget);
             }
         }
+        
         CloseHandle(p.hProcess);
         CloseHandle(p.hThread);
+        count++;
     }
     
     bgProcesses.clear(); 
     
     if (count > 0) {
-        std::cout << "TinyShell: Terminated " << count << " background process(es) before exiting.\n";
+        std::cout << "TinyShell: Terminated " << count << " background process tree(s) before exiting.\n";
     }
 }
 
+// Asynchronous Sleep: Suspends a process, waits without blocking the shell, then resumes
 void SleepProcessForDuration(const std::string& target, int seconds) {
     if (seconds <= 0) {
         std::cerr << "TinyShell: Error: Duration must be greater than 0 seconds.\n";
         return;
     }
 
+    // Launch an independent background thread
     std::thread([target, seconds]() {
+        // 1. Suspend the process
         StopProcess(target);
         
+        // 2. Wait for the specified duration (Does not block the main shell input)
         std::this_thread::sleep_for(std::chrono::seconds(seconds));
         
+        // 3. Awaken the process
         ResumeProcess(target);
         
-    }).detach(); 
+    }).detach(); // Detach allows the thread to run and clean itself up independently
 }
