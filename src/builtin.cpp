@@ -44,7 +44,8 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
         std::cout << "  list              : Show all background processes\n";
         std::cout << "  kill <PID>        : Terminate background process\n";
         std::cout << "  stop <PID>        : Suspend background process\n";
-        std::cout << "  resume <PID>      : Resume suspended process\n\n";
+        std::cout << "  resume <PID>      : Resume suspended process\n";
+        std::cout << "  sleep <PID> <sec>  : Suspend process for specified seconds then resume\n\n";
         
         std::cout << "SYSTEM ENVIRONMENT:\n";
         std::cout << "  date              : Display current date\n";
