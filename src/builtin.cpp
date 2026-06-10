@@ -16,6 +16,7 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
             std::cerr << "TinyShell: Error: too many arguments for exit/quit command\n";
             return true;
         }
+        TerminateAllProcesses();
         ExitProcess(0);
     } 
     
@@ -309,6 +310,24 @@ bool HandleBuiltin(const std::vector<std::string>& args) {
         }
         return true;
     } 
+
+    // 13. Sleep process for duration command
+    else if (args[0] == "sleep") {
+        if (args.size() < 3) {
+            std::cerr << "TinyShell: Error: Missing arguments. Usage: sleep <PID/%JobID> <seconds>\n";
+        } else if (args.size() > 3) {
+            std::cerr << "TinyShell: Error: too many arguments for sleep command\n";
+        } else {
+            try {
+                int seconds = std::stoi(args[2]);
+                SleepProcessForDuration(args[1], seconds);
+                std::cout << "TinyShell: Target " << args[1] << " put to sleep for " << seconds << " seconds.\n";
+            } catch (...) {
+                std::cerr << "TinyShell: Error: Invalid seconds format. Must be an integer.\n";
+            }
+        }
+        return true;
+    }
 
     return false; // Return false if not a built-in command (pass to external process)
 }

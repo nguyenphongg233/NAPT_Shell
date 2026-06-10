@@ -20,5 +20,7 @@ void KillProcess(const std::string& target);
 void StopProcess(const std::string& target);
 void ResumeProcess(const std::string& target);
 void CleanUpProcesses(); // Remove terminated processes from list
+void TerminateAllProcesses(); // Terminate all background processes (used on shell exit)
+void SleepProcessForDuration(const std::string& target, int seconds); // Suspend for duration then resume
 
 #endif // PROCESS_MGR_H

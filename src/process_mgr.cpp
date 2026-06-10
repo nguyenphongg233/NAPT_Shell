@@ -6,6 +6,8 @@
 #include <tlhelp32.h>
 #include <algorithm>
 #include <unordered_map>
+#include <thread>
+#include <chrono>
 
 std::vector<ProcessInfo> bgProcesses;
 std::mutex bgMutex;
@@ -271,4 +273,42 @@ void ResumeProcess(const std::string& target) {
         }
     }
     if (!found) std::cerr << "Process ID " << pid << " not found.\n";
+}
+
+void TerminateAllProcesses() {
+    std::lock_guard<std::mutex> lock(bgMutex);
+    int count = 0;
+    
+    for (auto& p : bgProcesses) {
+        DWORD exitCode;
+        if (GetExitCodeProcess(p.hProcess, &exitCode) && exitCode == STILL_ACTIVE) {
+            if (TerminateProcess(p.hProcess, 0)) {
+                count++;
+            }
+        }
+        CloseHandle(p.hProcess);
+        CloseHandle(p.hThread);
+    }
+    
+    bgProcesses.clear(); 
+    
+    if (count > 0) {
+        std::cout << "TinyShell: Terminated " << count << " background process(es) before exiting.\n";
+    }
+}
+
+void SleepProcessForDuration(const std::string& target, int seconds) {
+    if (seconds <= 0) {
+        std::cerr << "TinyShell: Error: Duration must be greater than 0 seconds.\n";
+        return;
+    }
+
+    std::thread([target, seconds]() {
+        StopProcess(target);
+        
+        std::this_thread::sleep_for(std::chrono::seconds(seconds));
+        
+        ResumeProcess(target);
+        
+    }).detach(); 
 }
